@@ -3,6 +3,7 @@
 param([string]$InputFolder,[string]$OutputFolder,[ValidateRange(72,1200)][int]$Dpi=300,[switch]$KeepPdf)
 
 Clear-Host
+$ErrorActionPreference = 'Stop'
 function Log {
     param([string]$Level,[string]$Message)
     $Color = switch ($Level) {
@@ -93,7 +94,7 @@ try {
     $GV=@(Run-Native $GS @('--version') $Temp)
     if (($GV -join '') -notmatch '^\d+\.\d+(\.\d+)?$') { throw 'Invalid Ghostscript version.' }
     $Formats=@(Run-Native $Magick @('-list','format') $Temp)
-    if (-not ($Formats -match '^\s*PDF\*?\s+\S+\s+r') -or -not ($Formats -match '^\s*TIFF\*?\s+\S+\s+\S*w')) { throw 'PDF read or TIFF write support unavailable.' }
+    if (-not ($Formats -match '^\s*PDF\*?\s+r[w+-]*\s') -or -not ($Formats -match '^\s*TIFF\*?\s+[r-]w[+-]?\s')) { throw 'PDF read or TIFF write support unavailable.' }
     Log PASS 'Dependency checks passed.'
     # Brak argumentu oznacza biezacy katalog, bez pytania.
     if ([string]::IsNullOrWhiteSpace($InputFolder)) { $InputFolder=(Get-Location).Path; Log INFO 'Using current directory.' }
