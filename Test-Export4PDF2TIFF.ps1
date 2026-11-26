@@ -1,6 +1,6 @@
 #requires -Version 5.1
 [CmdletBinding()]
-param()
+param([ValidateSet('All','PS51','PS7')][string]$EngineName='All')
 # Czyszczenie tylko przy dostepnej konsoli interaktywnej.
 try {
     if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
@@ -24,6 +24,9 @@ function Hash($Path) {
 }
 Log INFO '=== REQUEST #6 / ACCEPTANCE TEST ==='
 $Passed=0
+$ExpectedTests=4
+if ($EngineName -ne 'All') { $ExpectedTests=2 }
+Log INFO "ENGINE_SELECTION=$EngineName; EXPECTED_TESTS=$ExpectedTests"
 try {
     # Weryfikacja interpreterow oraz narzedzi.
     $Project=$PSScriptRoot
@@ -63,6 +66,7 @@ try {
     $MasterHash=Hash $Master
     foreach ($Engine in @($PS51,$PS7)) {
         $Name=if ($Engine -eq $PS51) {'PS51'} else {'PS7'}
+        if ($EngineName -ne 'All' -and $EngineName -ne $Name) { continue }
         try {
             $Converter=Join-Path $Project "Export4PDF2TIFF-$Name.ps1"
             Assert (Test-Path -LiteralPath $Converter -PathType Leaf) "Missing script: $Converter"
@@ -135,9 +139,10 @@ try {
         catch { Log ERROR "$Name : $($_.Exception.Message)"; Log DEBUG $_.ScriptStackTrace }
     }
     Assert ((Hash $Master) -eq $MasterHash) 'Master PDF changed.'
-    Log INFO "PASSED=$Passed/4; TEST_DIRECTORY=$Root"
-    Assert ($Passed -eq 4) 'Acceptance tests failed.'
-    Log PASS 'RESULT=ACCEPTANCE_TEST_PASS'
+    Log INFO "PASSED=$Passed/$ExpectedTests; TEST_DIRECTORY=$Root"
+    Assert ($Passed -eq $ExpectedTests) 'Acceptance tests failed.'
+    if ($EngineName -eq 'All') { Log PASS 'RESULT=ACCEPTANCE_TEST_PASS' }
+    if ($EngineName -ne 'All') { Log PASS 'RESULT=SELECTED_TESTS_PASS' }
 }
 catch { Log ERROR $_.Exception.Message; Log ERROR 'RESULT=ACCEPTANCE_TEST_FAILED' }
 Log INFO '=== REQUEST #6 / FINISHED ==='
