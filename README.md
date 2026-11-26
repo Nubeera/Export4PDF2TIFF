@@ -15,3 +15,6 @@ Safety: read-locked staging copy with SHA256 check, independent Ghostscript page
 Console: local time [yyMMdd HH:mm:ss] on each application log line, English INFO/DEBUG/PASS/WARN/ERROR, progress, commands, buffered native stdout/stderr after each process, checksums and timings. Polish comments, CRLF checkout.
 
 Validation: original single-page Windows output quality accepted by user. Multipage pipeline, independent count and pixel signature verification tested on 9 sample PDFs in Linux (ImageMagick 7.1.2-1, Ghostscript 10.05.1); full batch test interrupted by time limit. Both Windows wrappers and destructive operation await acceptance testing. No user PDFs or TIFFs included in public repo.
+
+## Windows acceptance tests
+Run `& 'C:\Tools\Export4PDF2TIFF\Test-Export4PDF2TIFF.ps1'` in PowerShell 7 after synchronizing main. The test generates isolated PDFs under C:\Tools\Export4PDF2TIFF-Tests, checks syntax in each target interpreter, and verifies four scenarios (KEEP and DELETE for each runtime), including page properties, corrupt input retention and output collision protection. Logs and fixtures remain for inspection. A heartbeat is shown every five seconds while child processes run. Windows execution has not yet been verified.
