@@ -163,64 +163,7 @@ try {
                 Log INFO 'STAGE=RENDER_PDF_TO_MIFF'
                 $Render=@('-regard-warnings','-density',"$Dpi",'-define','pdf:use-cropbox=false','input.pdf','-background','white','-alpha','remove','-alpha','off','-colorspace','gray','-threshold','50%','-type','bilevel','-units','PixelsPerInch','-density',"$Dpi",'-depth','1','-compress','Zip','-adjoin','render.miff')
                 Run-Native $Magick $Render $Stage | Out-Null
-                $Pixels=@(Run-Native $Magick @('identify','-regard-warnings','-format','PIX=%w|%h|%#\n','render.miff') $Stage | Where-Object { $_ -match '^PIX=\d+\|\d+\|[0-9a-fA-F]{64}
-                # Pelne dekodowanie i porownanie kazdej strony.
-                $Check=@(Run-Native $Magick @('identify','-regard-warnings','-format','PAGE=%m|%z|%C|%x|%y|%U|%w|%h|%#\n','result.tif') $Stage | Where-Object { $_ -match '^PAGE=' })
-                if ($Check.Count -ne $Expected) { throw 'TIFF page count mismatch.' }
-                for ($N=0; $N -lt $Expected; $N++) {
-                    $Wanted="PAGE=TIFF|1|Group4|$Dpi|$Dpi|PixelsPerInch|"+$Pixels[$N].Substring(4)
-                    if ($Check[$N] -ne $Wanted) { throw "Page $($N+1) properties or pixels differ." }
-                    Log PASS "PAGE $($N+1)/$Expected verified: $($Check[$N])"
-                }
-                $TiffHash=Hash-File $StageTif
-                # Publikacja bez nadpisywania i weryfikacja pliku docelowego.
-                [IO.File]::Move($StageTif,$Target)
-                $Published=$true
-                if ((Hash-File $Target) -ne $TiffHash) { throw 'Published TIFF checksum mismatch.' }
-                $Verified=$true
-                Log PASS "TIFF_SHA256=$TiffHash; TIFF_BYTES=$((Get-Item -LiteralPath $Target -ErrorAction Stop).Length)"
-                $Stream.Dispose(); $Stream=$null
-                # Usuniecie tylko po pelnej weryfikacji i ponownym sprawdzeniu sum.
-                if (-not $KeepPdf) {
-                    if ((Hash-File $Pdf.FullName) -ne $SourceHash) { throw 'Source changed; deletion cancelled.' }
-                    if ((Hash-File $Target) -ne $TiffHash) { throw 'Output changed; deletion cancelled.' }
-                    Remove-Item -LiteralPath $Pdf.FullName -ErrorAction Stop
-                    if (Test-Path -LiteralPath $Pdf.FullName) { throw 'Source still exists after deletion.' }
-                    $Deleted++; Log PASS "PDF_DELETED=$($Pdf.FullName)"
-                }
-                if ($KeepPdf) { Log INFO 'KeepPdf enabled; source retained.' }
-                $OK++; $Pages+=$Expected
-                Log PASS "CONVERTED=$Target; PAGES=$Expected"
-            }
-            catch {
-                $Failed++; Log ERROR "$($Pdf.Name): $($_.Exception.Message)"
-                Log DEBUG "$($_.ScriptStackTrace)"
-                if ($Published) { Log WARN 'Published TIFF retained; review before retry.' }
-                if (Test-Path -LiteralPath $Pdf.FullName) { Log INFO 'Source PDF retained.' }
-            }
-            finally {
-                if ($Stream) { $Stream.Dispose() }
-                if ($Stage -and (Test-Path -LiteralPath $Stage -PathType Container)) {
-                    if ($Verified) {
-                        try { Remove-Item -LiteralPath $Stage -Recurse -Force -ErrorAction Stop }
-                        catch { Log WARN "Staging cleanup failed: $Stage" }
-                    }
-                    if (Test-Path -LiteralPath $Stage -PathType Container) { Log WARN "Staging files retained: $Stage" }
-                }
-                Log DEBUG "FILE_ELAPSED_MS=$($Watch.ElapsedMilliseconds)"
-            }
-        }
-    }
-}
-catch { $Fatal=$true; Log ERROR $_.Exception.Message; Log DEBUG "$($_.ScriptStackTrace)" }
-finally {
-    Log INFO "PDF_SUCCESS=$OK; PDF_SKIPPED=$Skipped; PDF_FAILED=$Failed; TIFF_PAGES=$Pages; PDF_DELETED=$Deleted"
-    Log INFO "TOTAL_ELAPSED_MS=$($BatchWatch.ElapsedMilliseconds)"
-    if ($Fatal -or $Failed -gt 0) { Log ERROR 'RESULT=COMPLETED_WITH_ERRORS' }
-    if (-not $Fatal -and $Failed -eq 0) { Log PASS 'RESULT=COMPLETED' }
-    Log INFO '=== EXPORT4PDF2TIFF / FINISHED ==='
-}
- })
+                $Pixels=@(Run-Native $Magick @('identify','-regard-warnings','-format','PIX=%w|%h|%#\n','render.miff') $Stage | Where-Object { $_ -match '^PIX=\d+\|\d+\|[0-9a-fA-F]{64}$' })
                 if ($Pixels.Count -ne $Expected) { throw "Rendered page count mismatch: expected $Expected, found $($Pixels.Count)." }
                 Log PASS "RENDERED_PAGES=$($Pixels.Count)"
                 Log INFO 'STAGE=ENCODE_MULTIPAGE_TIFF'
