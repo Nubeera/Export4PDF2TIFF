@@ -1,33 +1,17 @@
 # Export4PDF2TIFF
 
-Batch conversion of scanned PDF engineering drawings to monochrome TIFF on Windows.
+Two standalone Windows scripts: Export4PDF2TIFF-PS51.ps1 (Windows PowerShell 5.1) and Export4PDF2TIFF-PS7.ps1 (PowerShell 7). Both use the same conversion logic with distinct runtime checks.
 
-## Requirements
-- Windows PowerShell 5.1 or PowerShell 7.
-- ImageMagick 7 (Q16 x64 installed on the reference workstation).
-- Ghostscript x64, installed and discoverable by ImageMagick.
-- Reference workstation versions: ImageMagick 7.1.2-36, Ghostscript 10.08.0 (installation verified 2026-11-26).
-- No Poppler or Python required for runtime.
+Requires ImageMagick 7 and Ghostscript x64. Startup checks executables, versions and PDF/TIFF support. Reference workstation: ImageMagick 7.1.2-36 and Ghostscript 10.08.0. No Poppler or Python needed.
 
-## Installation and usage
-Clone to `C:\Tools\Export4PDF2TIFF`.
+Run the appropriate script in the corresponding shell. Default input is the current PowerShell filesystem directory, not the script directory; optionally pass -InputFolder. Default output is the TIFF subdirectory; optionally pass -OutputFolder. Default DPI is 300; optionally pass -Dpi. Non-recursive.
 
-```powershell
-& 'C:\Tools\Export4PDF2TIFF\Export4PDF2TIFF.ps1'
-```
+**Source PDFs are permanently deleted by default after verification.** Use -KeepPdf for a non-destructive test. Test only on copies first. Existing target TIFFs cause the corresponding PDF to be skipped and retained; previous separate-page TIFFs are not changed. Do not concurrently modify input/output folders. Final hash checks and deletion are separate filesystem operations.
 
-Enter the folder containing PDF files. Alternatively specify `-InputFolder`, `-OutputFolder` and optionally `-Dpi` (default 300).
+One PDF = one multipage TIFF, same basename, original page order, mixed page dimensions, 1-bit monochrome, CCITT Group 4. Color/grayscale are intentionally thresholded; not a universal archival replacement for PDF text, annotations, signatures, metadata or attachments.
 
-## Output
-- Non-recursive batch of PDF files from the selected folder.
-- Default output: `TIFF` subfolder.
-- One TIFF per page, e.g. `Drawing_000001.tif`.
-- 1-bit monochrome, CCITT Group 4 compression, 300 DPI by default.
-- PDF page dimensions retained at selected rendering density. Color and grayscale are deliberately thresholded at 50%; this is intended for monochrome scans, not general preservation of arbitrary PDF images.
-- Original PDF files remain unchanged. Existing numbered output files for a PDF cause it to be skipped.
-- Temporary copies and intermediate TIFFs use a unique staging directory. Successful staging directories are removed; failed ones are retained for diagnosis. If publication fails partway through, partial output is retained and subsequent runs skip the affected PDF until the operator resolves it.
-- Per-file progress, validation of TIFF properties, and summary counters.
-- No automatic installations, registry changes, or elevation.
+Safety: read-locked staging copy with SHA256 check, independent Ghostscript page count, signatures before encoding, full TIFF decoding and comparison of page count, pixel signatures, dimensions, DPI, depth and compression. Publish without overwrite and verify SHA256; check source and target hash again before removing original. Native stderr diagnostics stop processing conservatively. Failed staging directories may retain PDF copies for diagnosis; verified published TIFF is retained if deletion fails. No automatic installations or execution policy changes.
 
-## Validation
-On 2026-11-26 the ImageMagick/Ghostscript conversion pipeline was tested on 18 sample scanned PDFs (46 pages) using Linux ImageMagick 7.1.2-1 and Ghostscript 10.05.1. All 46 output pages matched the pixel dimensions and pixel values of the extracted reference images and had 1-bit depth, 300 DPI and CCITT Group 4 compression. This is a sample-specific result, not a guarantee for arbitrary PDFs. The PowerShell wrapper itself has been reviewed but has not yet been executed on Windows; Windows acceptance testing is pending. Source PDFs and converted test images are not committed to this public repository.
+Console: local time [yyMMdd HH:mm:ss] on each application log line, English INFO/DEBUG/PASS/WARN/ERROR, progress, commands, buffered native stdout/stderr after each process, checksums and timings. Polish comments, CRLF checkout.
+
+Validation: original single-page Windows output quality accepted by user. Multipage pipeline, independent count and pixel signature verification tested on 9 sample PDFs in Linux (ImageMagick 7.1.2-1, Ghostscript 10.05.1); full batch test interrupted by time limit. Both Windows wrappers and destructive operation await acceptance testing. No user PDFs or TIFFs included in public repo.
