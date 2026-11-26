@@ -1,7 +1,15 @@
 #requires -Version 5.1
 [CmdletBinding()]
 param()
-Clear-Host
+# Czyszczenie tylko przy dostepnej konsoli interaktywnej.
+try {
+    if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
+        Clear-Host -ErrorAction Stop
+    }
+}
+catch {
+    Write-Host ('[{0}] WARN: Console clear unavailable: {1}' -f (Get-Date -Format 'yyMMdd HH:mm:ss'),$_.Exception.Message)
+}
 $ErrorActionPreference = 'Stop'
 function Log($Level,$Message) {
     foreach ($Line in ("$Message" -split '\r?\n')) {
@@ -96,7 +104,10 @@ try {
                 }
                 finally { $Child.Dispose() }
                 $Output=Get-Content -LiteralPath $StdOut -Raw
-                Get-Content -LiteralPath $StdOut | ForEach-Object { Log DEBUG $_ }
+                Get-Content -LiteralPath $StdOut | ForEach-Object {
+                    if ($_ -match '^\[\d{6} \d{2}:\d{2}:\d{2}\]') { Write-Host $_ }
+                    else { Log DEBUG $_ }
+                }
                 Get-Content -LiteralPath $StdErr | ForEach-Object { Log WARN $_ }
                 Assert ($Code -eq 0) "Child PowerShell returned $Code"
                 Assert (Test-Path -LiteralPath $Target -PathType Leaf) 'Output TIFF missing.'

@@ -18,3 +18,6 @@ Validation: original single-page Windows output quality accepted by user. Multip
 
 ## Windows acceptance tests
 Run `& 'C:\Tools\Export4PDF2TIFF\Test-Export4PDF2TIFF.ps1'` in PowerShell 7 after synchronizing main. The test generates isolated PDFs under C:\Tools\Export4PDF2TIFF-Tests, checks syntax in each target interpreter, and verifies four scenarios (KEEP and DELETE for each runtime), including page properties, corrupt input retention and output collision protection. Logs and fixtures remain for inspection. A heartbeat is shown every five seconds while child processes run. Windows execution has not yet been verified.
+
+### Windows validation 2026-11-26
+First acceptance run: 0/4; PDF/TIFF startup check rejected valid ImageMagick 7 output containing the Module column. No PDFs processed. The capability check now accepts both table layouts and requires multipage TIFF write support; successful startup logs only the relevant format rows. Console clearing is skipped when output is redirected; child timestamps are preserved. Windows retest pending.

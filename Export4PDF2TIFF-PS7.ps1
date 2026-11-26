@@ -2,7 +2,15 @@
 [CmdletBinding()]
 param([string]$InputFolder,[string]$OutputFolder,[ValidateRange(72,1200)][int]$Dpi=300,[switch]$KeepPdf)
 
-Clear-Host
+# Czyszczenie tylko przy dostepnej konsoli interaktywnej.
+try {
+    if (-not [Console]::IsOutputRedirected -and -not [Console]::IsErrorRedirected) {
+        Clear-Host -ErrorAction Stop
+    }
+}
+catch {
+    Write-Host ('[{0}] WARN: Console clear unavailable: {1}' -f (Get-Date -Format 'yyMMdd HH:mm:ss'),$_.Exception.Message)
+}
 $ErrorActionPreference = 'Stop'
 function Log {
     param([string]$Level,[string]$Message)
@@ -19,7 +27,7 @@ function Log {
     }
 }
 function Run-Native {
-    param([string]$Exe,[string[]]$Arguments,[string]$WorkingDirectory)
+    param([string]$Exe,[string[]]$Arguments,[string]$WorkingDirectory,[switch]$QuietStdOut)
     # Oba strumienie odczytywane rownolegle, logowane po zakonczeniu.
     $Quoted = foreach ($Arg in $Arguments) {
         if ($Arg.Contains('"')) { throw 'Unsupported quote in native argument.' }
@@ -45,7 +53,9 @@ function Run-Native {
         $StdOut = $OutTask.GetAwaiter().GetResult()
         $StdErr = $ErrTask.GetAwaiter().GetResult()
         $Code = $Proc.ExitCode
-        foreach ($Line in ($StdOut -split '\r?\n')) { if ($Line) { Log DEBUG "STDOUT: $Line" } }
+        if (-not $QuietStdOut -or $Code -ne 0) {
+            foreach ($Line in ($StdOut -split '\r?\n')) { if ($Line) { Log DEBUG "STDOUT: $Line" } }
+        }
         foreach ($Line in ($StdErr -split '\r?\n')) { if ($Line) { Log WARN "STDERR: $Line" } }
         Log DEBUG "PROCESS_CODE=$Code; ELAPSED_MS=$($Watch.ElapsedMilliseconds)"
         if ($Code -ne 0) { throw "Native process failed: $Code" }
@@ -93,8 +103,17 @@ try {
     if (($MV -join ' ') -notmatch 'ImageMagick 7\.') { throw 'ImageMagick 7 required.' }
     $GV=@(Run-Native $GS @('--version') $Temp)
     if (($GV -join '') -notmatch '^\d+\.\d+(\.\d+)?$') { throw 'Invalid Ghostscript version.' }
-    $Formats=@(Run-Native $Magick @('-list','format') $Temp)
-    if (-not ($Formats -match '^\s*PDF\*?\s+r[w+-]*\s') -or -not ($Formats -match '^\s*TIFF\*?\s+[r-]w[+-]?\s')) { throw 'PDF read or TIFF write support unavailable.' }
+    # ImageMagick moze wyswietlac dodatkowa kolumne Module.
+    $Formats=@(Run-Native $Magick @('-list','format') $Temp -QuietStdOut)
+    $PdfFormats=@($Formats | Where-Object { $_ -match '^\s*PDF\*?\s+(?:\S+\s+)?r[w-][+-]\s' })
+    $TiffFormats=@($Formats | Where-Object { $_ -match '^\s*TIFF\*?\s+(?:\S+\s+)?[r-]w\+\s' })
+    Log DEBUG "FORMAT_ROWS=$($Formats.Count)"
+    foreach ($Row in $PdfFormats) { Log PASS "PDF: $($Row.Trim())" }
+    foreach ($Row in $TiffFormats) { Log PASS "TIFF: $($Row.Trim())" }
+    if ($PdfFormats.Count -ne 1 -or $TiffFormats.Count -ne 1) {
+        foreach ($Row in $Formats) { Log DEBUG "FORMAT: $Row" }
+        throw 'PDF read or multipage TIFF write support unavailable.'
+    }
     Log PASS 'Dependency checks passed.'
     # Brak argumentu oznacza biezacy katalog, bez pytania.
     if ([string]::IsNullOrWhiteSpace($InputFolder)) { $InputFolder=(Get-Location).Path; Log INFO 'Using current directory.' }
