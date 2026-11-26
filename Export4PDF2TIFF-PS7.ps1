@@ -110,12 +110,14 @@ try {
     $TiffFormats=@($Formats | Where-Object { $_ -match '^\s*TIFF\*?\s+(?:\S+\s+)?[r-]w\+\s' })
     $MiffFormats=@($Formats | Where-Object { $_ -match '^\s*MIFF\*?\s+(?:\S+\s+)?rw\+\s' })
     foreach ($Row in $MiffFormats) { Log PASS "MIFF: $($Row.Trim())" }
+    $PngFormats=@($Formats | Where-Object { $_ -match '^\s*PNG\*?\s+(?:\S+\s+)?r[w-][+-]\s' })
+    foreach ($Row in $PngFormats) { Log PASS "PNG: $($Row.Trim())" }
     Log DEBUG "FORMAT_ROWS=$($Formats.Count)"
     foreach ($Row in $PdfFormats) { Log PASS "PDF: $($Row.Trim())" }
     foreach ($Row in $TiffFormats) { Log PASS "TIFF: $($Row.Trim())" }
-    if ($PdfFormats.Count -ne 1 -or $TiffFormats.Count -ne 1 -or $MiffFormats.Count -ne 1) {
+    if ($PdfFormats.Count -ne 1 -or $TiffFormats.Count -ne 1 -or $MiffFormats.Count -ne 1 -or $PngFormats.Count -ne 1) {
         foreach ($Row in $Formats) { Log DEBUG "FORMAT: $Row" }
-        throw 'PDF read, multipage MIFF read/write or multipage TIFF write support unavailable.'
+        throw 'Required PDF, PNG, MIFF or multipage TIFF capability unavailable.'
     }
     Log PASS 'Dependency checks passed.'
     # Brak argumentu oznacza biezacy katalog, bez pytania.
@@ -159,15 +161,30 @@ try {
                 $Expected=[int]($Count[0].Substring(6))
                 if ($Expected -lt 1) { throw 'PDF has no pages.' }
                 Log PASS "PDF_PAGES=$Expected"
-                # Bezstratny wielostronicowy MIFF; osobny odczyt podpisow wszystkich stron.
-                Log INFO 'STAGE=RENDER_PDF_TO_MIFF'
-                $Render=@('-regard-warnings','-density',"$Dpi",'-define','pdf:use-cropbox=false','input.pdf','-background','white','-alpha','remove','-alpha','off','-colorspace','gray','-threshold','50%','-type','bilevel','-units','PixelsPerInch','-density',"$Dpi",'-depth','1','-compress','Zip','-adjoin','render.miff')
-                Run-Native $Magick $Render $Stage | Out-Null
-                $Pixels=@(Run-Native $Magick @('identify','-regard-warnings','-format','PIX=%w|%h|%#\n','render.miff') $Stage | Where-Object { $_ -match '^PIX=\d+\|\d+\|[0-9a-fA-F]{64}$' })
-                if ($Pixels.Count -ne $Expected) { throw "Rendered page count mismatch: expected $Expected, found $($Pixels.Count)." }
+                # Ghostscript renderuje wszystkie strony do osobnych plikow PNG.
+                Log INFO 'STAGE=GHOSTSCRIPT_RENDER_PAGES'
+                Run-Native $GS @('-q','-dSAFER','-dPDFSTOPONERROR','-dPDFSTOPONWARNING','-dBATCH','-dNOPAUSE','-sDEVICE=png16m',("-r"+$Dpi),'-dTextAlphaBits=1','-dGraphicsAlphaBits=1','-sOutputFile=page-%06d.png','input.pdf') $Stage | Out-Null
+                $PngFiles=@(Get-ChildItem -LiteralPath $Stage -File -Filter 'page-*.png' -ErrorAction Stop | Sort-Object Name)
+                if ($PngFiles.Count -ne $Expected) { throw "Ghostscript page count mismatch: expected $Expected, found $($PngFiles.Count)." }
+                Log PASS "GHOSTSCRIPT_RENDERED_PAGES=$($PngFiles.Count)"
+                $Pixels=@(); $MiffNames=@()
+                for ($N=1; $N -le $Expected; $N++) {
+                    $Base='page-{0:D6}' -f $N
+                    $Png=$Base+'.png'
+                    $Miff=$Base+'.miff'
+                    if (-not (Test-Path -LiteralPath (Join-Path $Stage $Png) -PathType Leaf)) { throw "Missing rendered page: $Png" }
+                    Log INFO "STAGE=PREPARE_PAGE; PAGE=$N/$Expected"
+                    Run-Native $Magick @('-regard-warnings',$Png,'-background','white','-alpha','remove','-alpha','off','-colorspace','gray','-threshold','50%','-type','bilevel','-units','PixelsPerInch','-density',"$Dpi",'-depth','1','-compress','Zip',$Miff) $Stage | Out-Null
+                    $Signature=@(Run-Native $Magick @('identify','-regard-warnings','-format','PIX=%w|%h|%#\n',$Miff) $Stage | Where-Object { $_ -match '^PIX=\d+\|\d+\|[0-9a-fA-F]{64}$' })
+                    if ($Signature.Count -ne 1) { throw "Missing or ambiguous signature for page $N." }
+                    $Pixels+=$Signature[0]
+                    $MiffNames+=$Miff
+                }
                 Log PASS "RENDERED_PAGES=$($Pixels.Count)"
                 Log INFO 'STAGE=ENCODE_MULTIPAGE_TIFF'
-                Run-Native $Magick @('-regard-warnings','render.miff','-type','bilevel','-depth','1','-units','PixelsPerInch','-density',"$Dpi",'-compress','Group4','-adjoin','result.tif') $Stage | Out-Null
+                $Encode=@('-regard-warnings')+$MiffNames+@('-type','bilevel','-depth','1','-units','PixelsPerInch','-density',"$Dpi",'-compress','Group4','-adjoin','result.tif')
+                if (($Encode -join ' ').Length + 2*$Encode.Count + $Magick.Length -gt 30000) { throw 'Windows native command length limit; source retained.' }
+                Run-Native $Magick $Encode $Stage | Out-Null
                 Log INFO 'STAGE=VERIFY_MULTIPAGE_TIFF'
                 # Pelne dekodowanie i porownanie kazdej strony.
                 $Check=@(Run-Native $Magick @('identify','-regard-warnings','-format','PAGE=%m|%z|%C|%x|%y|%U|%w|%h|%#\n','result.tif') $Stage | Where-Object { $_ -match '^PAGE=' })
